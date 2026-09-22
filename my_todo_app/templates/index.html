@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>MY TO-DO APP</title>
+    </head>
+    <body>
+        <p>Enter Your Task</p>
+        <form method="POST" action="/todo">
+            <label for="id">ID</label>
+            <input type="number" id="id" name="id"/>
+            <label for="Task_name">Task</label>
+            <input type="text" id="task_name" name="task_name"/>
+            <label for="due_date">Due Date</label>
+            <input type="datetime" id="due_date" name="due_date"/>
+            <label for="status">status</label>
+            <input type="checkbox" value="done" id="status" name="status"/>
+
+            <button type="submit">add task</button>
+        </form>
+    </body>
+</html>
