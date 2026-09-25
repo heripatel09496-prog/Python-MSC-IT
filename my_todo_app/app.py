@@ -1,4 +1,4 @@
-from flask import Flask ,render_template,request,jsonify
+from flask import Flask ,render_template,request,redirect,url_for
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
@@ -49,10 +49,10 @@ def get_todo():
   
     return render_template("index.html", todo=todo)
 
-@app.route("/put/<int:id>",methods=["PUT"])
+@app.route("/edit/<int:id>",methods=["PUT"])
 def  todo_update(id):
     todo=Todo.query.get(id)
-    
+
     if todo is None:
         return "Todo not found",404
     data=request.form
@@ -62,6 +62,14 @@ def  todo_update(id):
 
     db.session.commit()
     return render_template("index.html")
+@app.route("/delete/<int:id>",methods=["POST"])
+def delete_todo(id):
+    todo=Todo.query.get(id)
+    if todo is None:
+        return"Todo not found",404
+    db.session.delete(todo)
+    db.session.commit()
+    return redirect(url_for("home"))
 
 
 if __name__ == "__main__":
