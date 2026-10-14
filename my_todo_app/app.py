@@ -1,79 +1,155 @@
-from flask import Flask ,render_template,request,redirect,url_for
+from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Use an in-memory database for clean, fast classroom testing
-# (To save to a real file, use: 'sqlite:///students.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///Todo.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Connect SQLAlchemy to Flask
+# Database configuration
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///Todo.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 db = SQLAlchemy(app)
 
+import os
 
+with app.app_context():
+    print("Database location:", db.engine.url.database)
+    print("Absolute path:", os.path.abspath(db.engine.url.database))
+
+
+# Todo table
 class Todo(db.Model):
-    id = db.Column(db.Integer, primary_key=True)       # Unique ID
-    task_name = db.Column(db.String(100), nullable=False)   # Name cannot be blank
-    due_date= db.Column(db.String(100), nullable=False) # Course name
-    status= db.Column(db.String(50),nullable=False,default="pending")                    # Grade (e.g. 'A+', 'B')
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(300), default="")
+    priority = db.Column(db.String(20), nullable=False, default="Medium")
+    is_completed = db.Column(db.Boolean, default=False, nullable=False)
+    due_date = db.Column(db.Date, nullable=False)
 
-    def __repr__(self):
-        return (f"<Todo #{self.id}: {self.task_name} ({self.due_date}) - Status: {self.status}>")
-  
 
+# Display pending and completed tasks
 @app.route("/")
 def home():
-    return render_template("index.html")
+    pending = Todo.query.filter_by(is_completed=False).all()
+    completed = Todo.query.filter_by(is_completed=True).all()
 
-@app.route("/add",methods=['POST'])
+    return render_template(
+        "index.html",
+        pending=pending,
+        completed=completed
+    )
+
+
+# Add a new task
+@app.route("/add", methods=["POST"])
 def add_todo():
-    task_name=request.form.get("task_name")
-    due_date=request.form.get("due_date")
-    status=request.form.get("status")
+    title = request.form.get("title", "").strip()
+    description = request.form.get("description", "").strip()
+    priority = request.form.get("priority")
+    due_date = request.form.get("due_date")
 
-    t1=Todo(
-            task_name=task_name,
-            status=status,
-            due_date=due_date
-            )
-        #2. Stage and save
-    db.session.add(t1)
-    db.session.commit()  
-        
-    return render_template("index.html")
+    if not title or not due_date:
+        return "Title and due date are required.", 400
 
-@app.route("/get", methods=["GET"])
-def get_todo():
-    todo=Todo.query.all()
-  
-    return render_template("index.html", todo=todo)
+    if len(title) > 150 or len(description) > 300:
+        return "Title or description is too long.", 400
 
-@app.route("/edit/<int:id>",methods=["PUT"])
-def  todo_update(id):
-    todo=Todo.query.get(id)
+    if priority not in ["High", "Medium", "Low"]:
+        return "Invalid priority.", 400
 
-    if todo is None:
-        return "Todo not found",404
-    data=request.form
-    todo.task_name=data.get("task_name",todo.task_name)
-    todo.due_date=data.get("due_date",todo.due_date)
-    todo.status=data.get("status",todo.status)
+    try:
+        due_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+    except ValueError:
+        return "Invalid due date.", 400
 
+    task = Todo(
+        title=title,
+        description=description,
+        priority=priority,
+        due_date=due_date
+    )
+
+    db.session.add(task)
     db.session.commit()
-    return render_template("index.html")
-@app.route("/delete/<int:id>",methods=["POST"])
-def delete_todo(id):
-    todo=Todo.query.get(id)
-    if todo is None:
-        return"Todo not found",404
-    db.session.delete(todo)
-    db.session.commit()
+
     return redirect(url_for("home"))
 
 
+# Mark a task completed or pending
+@app.route("/toggle/<int:id>", methods=["POST"])
+def toggle_todo(id):
+    task = db.session.get(Todo, id)
+
+    if task is None:
+        return "Task not found.", 404
+
+    task.is_completed = not task.is_completed
+    db.session.commit()
+
+    return redirect(url_for("home"))
+
+
+# Update an existing task
+@app.route("/update/<int:id>", methods=["POST"])
+def update_todo(id):
+    task = db.session.get(Todo, id)
+
+    if task is None:
+        return "Task not found.", 404
+
+    title = request.form.get("title", "").strip()
+    description = request.form.get("description", "").strip()
+    priority = request.form.get("priority")
+    due_date = request.form.get("due_date")
+
+    if not title or not due_date:
+        return "Title and due date are required.", 400
+
+    if len(title) > 150 or len(description) > 300:
+        return "Title or description is too long.", 400
+
+    if priority not in ["High", "Medium", "Low"]:
+        return "Invalid priority.", 400
+
+    try:
+        due_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+    except ValueError:
+        return "Invalid due date.", 400
+
+    task.title = title
+    task.description = description
+    task.priority = priority
+    task.due_date = due_date
+
+    db.session.commit()
+
+    return redirect(url_for("home"))
+
+
+# Delete a task
+@app.route("/delete/<int:id>", methods=["POST"])
+def delete_todo(id):
+    task = db.session.get(Todo, id)
+
+    if task is None:
+        return "Task not found.", 404
+
+    db.session.delete(task)
+    db.session.commit()
+
+    return redirect(url_for("home"))
+
+
+# Create the database and start Flask
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run( port=5001,debug=True)
 
+    app.run(port=5001, debug=True)
+
+import os
+
+with app.app_context():
+    print("Database location:", db.engine.url.database)
+    print("Absolute path:", os.path.abspath(db.engine.url.database))
